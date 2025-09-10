@@ -1,0 +1,11 @@
+[package]
+name = "tsetlin-core"
+version = "0.1.0"
+edition = "2024"
+description = "Pure Rust implementation of the Tsetlin Machine"
+license = "MIT OR Apache-2.0"
+
+
+[dependencies]
+rand = "0.9.2"
+serde = { version = "1", features = ["derive"] }

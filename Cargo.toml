@@ -1,0 +1,3 @@
+[workspace]
+members = ["tsetlin-core", "tsetlin-py-bindings"]
+resolver = "3"
