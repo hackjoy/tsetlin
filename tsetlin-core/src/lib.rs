@@ -1,3 +1,4 @@
+use indicatif::ProgressBar;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
@@ -21,6 +22,11 @@ impl Literal {
 /// Configuration parameters for the Tsetlin Machine Model
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
+    pub seed: Option<u64>,
+    /// A high vote_margin (above vote_margin_threshold) means many rules are
+    /// predicting correctly for the class, so there is less need to recognise_feedback
+    /// vote_margin_threshold then helps constrain this update mechanism so it does not
+    /// reinforce what is already strong and encourages more diverse rules to be learned.
     pub vote_margin_threshold: i32,
     /// Literals are active in clause above this value.
     pub activation_threshold: i32,
@@ -33,7 +39,6 @@ pub struct Config {
     pub probability_to_forget: f64,
     pub probability_to_memorise: f64,
     pub clauses_per_class: usize,
-    pub seed: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,7 +55,6 @@ impl Model {
     pub fn new(x_features: Vec<String>, y_classes: Vec<String>, config: Config) -> Self {
         let label_index = x_features.len();
         let mut rules_state = vec![];
-
         for _ in 0..y_classes.len() {
             let mut class_rules = vec![];
             for _ in 0..config.clauses_per_class {
@@ -131,8 +135,13 @@ impl Model {
         correct as f64 / dataset.len() as f64
     }
 
-    /// Training function which mutates rules_state
+    /// Training function which ultimately learns a set of rules (rules_state) for prediction.
+    /// For each example in the dataset, the current rules_state is evaluated to determine the vote_margin
+    /// for the correct class. This then determines a threshold of how likely a rule is to be updated
+    /// when iterating over the rules and applying feedback of the current example to each rule,
+    /// according to how it evaluated. e.g. a rule that evaluated true for the correct class should recognise_feedback()
     pub fn train(&mut self, training_data: &[Vec<i32>]) {
+        let pb = ProgressBar::new(self.config.epochs as u64);
         let mut rng = if let Some(seed) = self.config.seed {
             StdRng::seed_from_u64(seed)
         } else {
@@ -143,14 +152,18 @@ impl Model {
         let memory_min = self.config.memory_min;
         let memory_max = self.config.memory_max;
         let activation_threshold = self.config.activation_threshold;
+        let vote_margin_threshold = self.config.vote_margin_threshold;
 
-        for _epoch in 0..self.config.epochs {
+        for epoch in 0..self.config.epochs {
+            pb.set_message(format!("Epoch {}/{}", epoch + 1, self.config.epochs));
+            pb.inc(1);
+
             for example in training_data.iter() {
                 let label = example[self.label_index] as usize;
                 let true_class = label;
                 let other_class = 1 - label;
 
-                // Calculate votes for each class
+                // Calculate votes for each class given this example
                 let mut votes_per_class = vec![0; self.rules_state.len()];
                 for (class_idx, rules) in self.rules_state.iter().enumerate() {
                     for rule in rules {
@@ -160,19 +173,19 @@ impl Model {
                     }
                 }
 
-                let vote_margin_threshold = self.config.vote_margin_threshold;
-                // Compute vote_margin, the models measure of confidence often written as "v"
-                let mut vote_margin = votes_per_class[true_class] - votes_per_class[other_class]; // Delta of correct/incorrect votes
-                vote_margin = vote_margin.clamp(-vote_margin_threshold, vote_margin_threshold); // Constrain vote_margin within threshold
+                // Compute vote_margin and constrain by threshold, often written as "v"
+                let abs_vote_margin = votes_per_class[true_class] - votes_per_class[other_class]; // Delta of correct/incorrect votes
+                let vote_margin =
+                    abs_vote_margin.clamp(-vote_margin_threshold, vote_margin_threshold); // Constrain vote_margin within threshold
+                // Higher vote_margin, will generate a lower feedback_threshold, lowering the chance of rule updates
+                // Lower vote_margin, will generate a higher feedback_threshold, increasing the chance of rule updates
+                let feedback_threshold = (vote_margin_threshold - vote_margin) as f64
+                    / (2.0 * vote_margin_threshold as f64);
 
                 // Update rules
                 for (class_idx, rules) in self.rules_state.iter_mut().enumerate() {
                     for rule in rules.iter_mut() {
-                        // Higher vote margin means lower chance for rule updates.
-                        // Lower vote margin means higher chance for rule updates.
-                        let prob_of_update = (vote_margin_threshold - vote_margin) as f64
-                            / (2.0 * vote_margin_threshold as f64);
-                        let should_update_rule = rng.random::<f64>() <= prob_of_update;
+                        let should_update_rule = rng.random::<f64>() <= feedback_threshold;
                         if !should_update_rule {
                             continue;
                         }
@@ -217,6 +230,7 @@ impl Model {
                 }
             }
         }
+        pb.finish_with_message("Training complete ✅");
     }
 
     /// Predict the class of a new example
