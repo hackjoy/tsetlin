@@ -159,9 +159,8 @@ impl Model {
             pb.inc(1);
 
             for example in training_data.iter() {
-                let label = example[self.label_index] as usize;
-                let true_class = label;
-                let other_class = 1 - label;
+                let true_class = example[self.label_index] as usize;
+                let _num_classes = self.rules_state.len();
 
                 // Calculate votes for each class given this example
                 let mut votes_per_class = vec![0; self.rules_state.len()];
@@ -173,8 +172,16 @@ impl Model {
                     }
                 }
 
+                // Calculate which is the next most voted class compared to the true_class
+                let mut top_competitor_votes = i32::MIN;
+                for (idx, &votes) in votes_per_class.iter().enumerate() {
+                    if idx != true_class && votes > top_competitor_votes {
+                        top_competitor_votes = votes;
+                    }
+                }
+
                 // Compute vote_margin and constrain by threshold, often written as "v"
-                let abs_vote_margin = votes_per_class[true_class] - votes_per_class[other_class]; // Delta of correct/incorrect votes
+                let abs_vote_margin = votes_per_class[true_class] - top_competitor_votes;
                 let vote_margin =
                     abs_vote_margin.clamp(-vote_margin_threshold, vote_margin_threshold); // Constrain vote_margin within threshold
                 // Higher vote_margin, will generate a lower feedback_threshold, lowering the chance of rule updates
@@ -248,14 +255,14 @@ impl Model {
             }
         }
 
-        let pred_class = votes_per_class
+        let predicted_class = votes_per_class
             .iter()
             .enumerate()
             .max_by_key(|&(_, &v)| v)
             .map(|(idx, _)| idx)
             .unwrap_or(0);
 
-        (pred_class, votes_per_class, activated_clauses)
+        (predicted_class, votes_per_class, activated_clauses)
     }
 
     /// Evaluate whether a rule's active condition is valid

@@ -5,13 +5,13 @@
 ### Features
 - [x] Training + inference API
 - [x] Binary classification
+- [x] Multiclass classification
 
 ### Roadmap
 
-- Support multiclass classification
 - Parallel clause updates using rayon
 - Efficient clause representation (bitvec, bitmaps)
 - Reduce memory allocations
 - Real world dataset examples.
-- Review API
+- Review API/codebase as a whole
 - More tests/modular code

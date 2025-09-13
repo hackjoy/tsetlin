@@ -20,6 +20,7 @@ model = PyModel(
     config=config,
 )
 
+# four_wheels, transports_people, wings, yellow, blue, y_class_index
 dataset = [
     (1, 1, 0, 0, 1, 1),  # CAR
     (1, 1, 0, 1, 0, 1),  # CAR

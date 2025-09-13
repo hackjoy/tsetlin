@@ -19,15 +19,20 @@ dev: venv install-dev-bindings
 test:
 	uv run pytest tests/
 
-.PHONY: example_car
-example_car:
-	uv run python car.py
-
 .PHONY: clean
 clean:
 	rm -rf .venv
 	rm -rf ../tsetlin-py-bindings/target/wheels/
 
+EXAMPLE ?= binary_car
+# make build_and_test EXAMPLE=classification/binary_car.py
+.PHONY: build_and_test
+build_and_test:
+	@echo "Building and testing example: $(EXAMPLE)"
+	make install-dev-bindings
+	make example_$(EXAMPLE)
 
-.PHONY: build_and_test_car
-build_and_test_car: install-dev-bindings example_car
+# make example_binary_car
+.PHONY: example_%
+example_%:
+	uv run python classification/$*.py
