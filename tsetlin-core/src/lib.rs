@@ -47,7 +47,26 @@ pub struct Model {
     pub y_classes: Vec<String>,
     pub label_index: usize,
     pub config: Config,
-    pub rules_state: Vec<Vec<Vec<Literal>>>, // [class][rule][feature]
+    /// rules_state contains vectors of Tsetlin automata for each y_class
+    /// Each feature is represented by a Literal with a (positive, negated) state value that is
+    /// adjusted during training. They have a memory_min (e.g. 0) and a memory_max (e.g. 10).
+    /// Only values above the activation_threshold (e.g. 5) become active in
+    /// the learned clause and then used when predicting (voting) on new input data.
+    ///
+    /// It can be indexed into as: [class][rule][feature]
+    /// Lets see a binary classification example, predicting ¬CAR vs CAR, with two features ["four_wheels", "wings"]
+    /// [
+    ///   [                           ** The 1st class (i.e. ¬CAR) - these rules vote for this class if the condition passes
+    ///     [ (5, 0), (0, 9) ]        **   This vector represents 1 set of Tsetlin automata.
+    ///     [ (2, 0), (0, 4) ]        **   A 2nd Tsetlin automata predicting ¬CAR
+    ///   ],
+    ///   [                           ** The 2nd class (i.e. CAR)
+    ///     [ (8, 2), (4, 0) ]        **   Tsetlin automata for the 2nd class
+    ///     [ (4, 1), (0, 8) ].       **   The second feature here (0,8) relates to "wings", the state
+    ///   ],                          **   value is 0 for the positive literal ("wings") and 8 for the negation ("¬wings")
+    ///                               **   meaning NOT wings is highly predicitive of CAR.
+    /// ]
+    pub rules_state: Vec<Vec<Vec<Literal>>>,
 }
 
 impl Model {
@@ -394,29 +413,29 @@ mod tests {
             activation_threshold: 5,
             memory_max: 10,
             memory_min: 0,
-            epochs: 3,
-            probability_to_forget: 0.9,
-            probability_to_memorise: 0.1,
+            epochs: 10,
+            probability_to_forget: 0.8,
+            probability_to_memorise: 0.2,
             clauses_per_class: 4,
-            seed: None,
+            seed: Some(1),
         };
 
         let mut model = Model::new(features, classes, config);
 
         let dataset = vec![
-            vec![1, 1, 0, 0, 1, 1],
+            vec![1, 1, 0, 0, 0, 1],
             vec![1, 1, 0, 1, 0, 1],
             vec![0, 1, 1, 1, 1, 0],
-            vec![1, 1, 0, 0, 0, 0],
+            vec![1, 1, 1, 0, 1, 0],
         ];
 
         model.train(&dataset);
 
-        let (pred, votes, active) = model.predict(&[1, 1, 0, 0, 1]);
+        let (pred, votes, active) = model.predict(&[0, 0, 1, 0, 1]); // Wings and Blue
         println!(
             "Prediction: {:?}, Votes: {:?}, Active: {:?}",
             pred, votes, active
         );
-        assert!(pred <= 1);
+        assert_eq!(pred, 0);
     }
 }
