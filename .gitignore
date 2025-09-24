@@ -2,3 +2,5 @@
 target
 notes.md
 .DS_Store
+tsetlin-py-examples/classification/hacks
+tm_rules_log.txt

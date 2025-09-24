@@ -1,2 +1,5 @@
 maturin
 pytest
+scikit-learn
+np
+matplotlib
